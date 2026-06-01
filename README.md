@@ -54,6 +54,24 @@ PostgreSQL's VACUUM is a source of operational pain at scale: heap bloat, autova
 
 AngaraBase runs row-store OLTP and columnar SIMD-accelerated OLAP **inside the same process, on the same data**. No Kafka. No Debezium. No ClickHouse cluster. No data lag. One binary on one Linux host.
 
+### 4. No external operational toolchain
+
+Running PostgreSQL reliably at scale requires a stack of auxiliary systems: Patroni + etcd for HA, pgBouncer for connection pooling, ClickHouse + Kafka for analytics, and cluster management tools on top. Each piece has its own failure modes, upgrade cycles, and expertise requirements.
+
+AngaraBase ships with what that stack gives you — but as built-in contracts, not bolt-on tools:
+
+| Capability | Postgres ecosystem | AngaraBase |
+|---|---|---|
+| OLTP + OLAP | Postgres + Kafka + ClickHouse | Built-in AngaraColumn engine |
+| High availability | Patroni + etcd (external coordinator) | Built-in Raft auto-failover *(v0.7)* |
+| Event bus / CDC | Kafka + Debezium | Built-in AngaraStream (WAL-based CDC in v0.7) |
+| `LISTEN`/`NOTIFY` | Postgres built-in | ✅ Implemented |
+| Observability | Third-party exporters | Built-in Prometheus metrics + USDT probes |
+| Resource governance | None | Fail-closed contracts per workload class |
+| Connection pooling | pgBouncer (separate) | Built-in admission control |
+
+> *The goal: one binary that you can reason about, monitor, and run a runbook against — without a dedicated platform engineering team.*
+
 ### How it compares
 
 |  | Postgres + ClickHouse | TiDB | AngaraBase |
@@ -63,7 +81,8 @@ AngaraBase runs row-store OLTP and columnar SIMD-accelerated OLAP **inside the s
 | No VACUUM / no heap bloat | ❌ | ❌ | **✅ UNDO-log** |
 | Zero-ETL (no Kafka pipeline) | ❌ | ✅ | **✅** |
 | PostgreSQL wire protocol | ✅ | ✅ | **✅** |
-| Single binary, self-hosted | ❌ (3 systems) | ❌ (multi-node) | **✅** |
+| Built-in HA (no Patroni/etcd) | ❌ | ✅ | **✅ *(v0.7)*** |
+| Single binary, self-hosted | ❌ (3+ systems) | ❌ (multi-node) | **✅** |
 | Operational complexity | High | Medium | Low |
 
 ---
@@ -81,8 +100,9 @@ AngaraBase is designed for workloads where **the cost of one unpredictable laten
 
 Be honest with yourself before switching:
 
-- You need **full PL/pgSQL**, triggers, `LISTEN`/`NOTIFY`, or the full Postgres extension ecosystem (`pgvector`, `PostGIS`). AngaraBase is not there yet.
-- You need a **managed cloud database** — AngaraBase is self-hosted Linux only.
+- You need **full PL/pgSQL** or triggers — not implemented yet (v0.7 roadmap for trigger foundation).
+- You need the full Postgres extension ecosystem (`pgvector`, `PostGIS`, …) — AngaraBase is pgwire-compatible, not a Postgres fork; third-party extensions do not work.
+- You need a **vendor-managed cloud database** (RDS, Cloud SQL, Atlas) with a vendor SLA — AngaraBase requires your own Linux infrastructure (`x86_64` / `aarch64`, `glibc ≥ 2.28`).
 - You're running **< v0.7 in unsupervised production** — the current dev preview is suited for pilots and design-partner engagements, not for replacing production Postgres today.
 
 Full compatibility map: [angarabase.dev → SQL Reference](https://angarabase.dev/sql-reference/).
@@ -92,7 +112,7 @@ Full compatibility map: [angarabase.dev → SQL Reference](https://angarabase.de
 ## What's in the box
 
 - **PostgreSQL wire protocol (`pgwire`)** — works with stock `psql`, JDBC, `libpq`, `pgx`, `asyncpg`. No
-  proprietary driver. No application rewrites.
+  proprietary driver. No application rewrites. `LISTEN` / `NOTIFY` / `UNLISTEN` supported.
 - **UNDO-log MVCC** in the Oracle / InnoDB tradition — no `VACUUM`, no heap bloat, snapshot-deterministic
   visibility.
 - **ARIES recovery** (Analysis → Redo → Undo, with CLR) — crash-consistent host migration and PITR through one
