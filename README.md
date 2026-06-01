@@ -251,6 +251,7 @@ Every strong statement in this README is backed by a verifiable artifact:
 | **Installation packages** | [GitHub Releases](../../releases) · [`PACKAGES.md`](PACKAGES.md) |
 | **PostgreSQL compatibility matrix** | [`docs/SQL_COMPATIBILITY.md`](docs/SQL_COMPATIBILITY.md) |
 | **Reliability guarantees & failure modes** | [`docs/RELIABILITY.md`](docs/RELIABILITY.md) |
+| **Design decisions & unique features** | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | **Architecture overview** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Architectural contracts** | [`contracts/`](contracts/) |
 | **Project principles** | [`docs/PROJECT_PRINCIPLES.md`](docs/PROJECT_PRINCIPLES.md) |
