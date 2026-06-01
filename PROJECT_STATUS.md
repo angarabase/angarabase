@@ -1,10 +1,3 @@
----
-title: "AngaraBase — Project Status"
-language: en
-doc_type: project_status_public
-public_mirror_of: PROJECT_STATUS.md
-sync_policy: "Update this file when the source RU file changes significantly (version bump, major milestone, new active focus)."
----
 
 # AngaraBase — Project Status
 

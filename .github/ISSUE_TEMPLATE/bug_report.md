@@ -1,10 +1,3 @@
----
-name: Bug report / regression
-about: Something that should work doesn't, or behavior changed unexpectedly
-title: "[BUG] "
-labels: bug
-assignees: ''
----
 
 ## Summary
 

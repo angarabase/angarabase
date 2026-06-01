@@ -1,11 +1,3 @@
----
-title: "AngaraBase — Architecture Overview"
-language: en
-doc_type: architecture_public
-public_mirror_of: docs/01_ARCHITECTURE.md
-sync_policy: "Update when major architectural decisions change (new engine, new MVCC model, new strategic horizon). Cosmetic internal changes do not require sync."
-last_synced: 2026-06-01
----
 
 # AngaraBase — Architecture Overview
 

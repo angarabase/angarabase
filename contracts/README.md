@@ -1,10 +1,3 @@
----
-title: "AngaraBase — Public Contracts"
-language: en
-doc_type: public_contract
-status: active
-last_updated: 2026-06-01
----
 
 # AngaraBase — Public Contracts
 

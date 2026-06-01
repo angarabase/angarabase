@@ -1,10 +1,3 @@
----
-name: Design partner inquiry
-about: Teams with production OLTP workloads interested in early access and evidence exchange
-title: "[DESIGN-PARTNER] "
-labels: design-partner
-assignees: ''
----
 
 ## About your workload
 

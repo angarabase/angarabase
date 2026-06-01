@@ -16,7 +16,7 @@
 ![Status](https://img.shields.io/badge/status-dev_preview-f59e0b)
 ![Community Hub](https://img.shields.io/badge/this_repo-community_hub-34d399)
 
-### 🌐 [angarabase.com](https://angarabase.com) · 📖 [angarabase.dev](https://angarabase.dev) · 📦 [Releases](../../releases) · 🐛 [Issues](../../issues) · 💬 [Discussions](../../discussions)
+### 🌐 [angarabase.com](https://angarabase.com) · 📖 [angarabase.dev](https://angarabase.dev) · 🗺 [Roadmap](ROADMAP.md) · 📦 [Releases](../../releases) · 🐛 [Issues](../../issues) · 💬 [Discussions](../../discussions)
 
 </div>
 
@@ -126,6 +126,45 @@ sudo -u angarabase /opt/angarabase/bin/angarabase-server \
 psql "host=127.0.0.1 port=5432 user=angara_root dbname=postgres"
 ```
 
+Once connected, you should see something like this:
+
+```
+psql (15.6, server 0.6.5)
+Type "help" for help.
+
+postgres=# CREATE TABLE orders (
+postgres(#   id      BIGSERIAL PRIMARY KEY,
+postgres(#   user_id BIGINT NOT NULL,
+postgres(#   amount  NUMERIC(12,2) NOT NULL,
+postgres(#   state   TEXT NOT NULL DEFAULT 'pending',
+postgres(#   created TIMESTAMPTZ NOT NULL DEFAULT now()
+postgres(# );
+CREATE TABLE
+
+postgres=# INSERT INTO orders(user_id, amount) VALUES (1, 99.99), (2, 149.00);
+INSERT 0 2
+
+postgres=# EXPLAIN SELECT user_id, SUM(amount) FROM orders GROUP BY user_id;
+                            QUERY PLAN
+------------------------------------------------------------------
+ HashAggregate  (cost=0.04 rows=2)
+   Group Key: user_id
+   ->  SeqScan on orders  (cost=0.00 rows=2)
+(3 rows)
+
+postgres=# SELECT * FROM angara_resource_usage();
+      resource      | used | limit | pct
+--------------------+------+-------+-----
+ connections        |    1 |   100 |   1
+ heap_mb            |    0 |  8192 |   0
+ undo_mb            |    0 |  2048 |   0
+ write_set_rows     |    0 | 50000 |   0
+(4 rows)
+```
+
+> If a limit is breached, AngaraBase returns a deterministic `SQLSTATE` error *before* the incident —
+> not after. See [`docs/PROJECT_PRINCIPLES.md`](docs/PROJECT_PRINCIPLES.md) §1 for the full contract.
+
 Full installation path (RPM / DEB, systemd, native packages) — [angarabase.dev → Installation](https://angarabase.dev/operations/installation.html).
 
 ---
@@ -179,14 +218,18 @@ ship as part of a release train.
 
 ---
 
-## Status
+## Status & Roadmap
 
 `v0.6.x` — **dev preview**. Suitable for supervised research pilots and design-partner engagements; not ready
 for unsupervised production.
 
 - Current branch and focus: [`PROJECT_STATUS.md`](PROJECT_STATUS.md)
+- **Where we are headed → [`ROADMAP.md`](ROADMAP.md)**
 - Releases: [GitHub Releases](../../releases)
 - Known limitations and `SQLSTATE` codes: [angarabase.dev → Known Issues](https://angarabase.dev/reference/known-issues.html)
+
+The high-level milestones: **v0.7** — Production-Ready + Open Beta (HA auto-failover, extended SQL, UDFs, CDC);
+**v0.8** — single-node hardening + GA prep; **v0.9** — Public GA + Community Edition + transparent sharding.
 
 ---
 

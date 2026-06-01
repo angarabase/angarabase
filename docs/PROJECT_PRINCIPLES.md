@@ -1,12 +1,3 @@
----
-title: "AngaraBase — Project Principles"
-language: en
-doc_type: project_principles_public
-public_mirror_of: docs/00_PROJECT_PRINCIPLES.md
-sync_policy: "Update this file when the source RU file changes (new principle, revised principle, version bump)."
-last_synced: 2026-06-01
-source_version: v2.0 (2026-03-14)
----
 
 # AngaraBase — Project Principles
 
