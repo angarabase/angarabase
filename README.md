@@ -226,6 +226,22 @@ Concept reference: [angarabase.dev → Concepts](https://angarabase.dev/concepts
 
 ---
 
+## Proof, not claims
+
+Every strong statement in this README is backed by a verifiable artifact:
+
+| Claim | Where to verify |
+|---|---|
+| "No VACUUM" — UNDO-log MVCC | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §Storage · `contracts/resource_boundaries.rs` |
+| "Fail-closed" — error before incident | [`docs/RELIABILITY.md`](docs/RELIABILITY.md) §G1 · `angara_resource_usage()` live output |
+| "Analytics cannot degrade OLTP" | [`docs/RELIABILITY.md`](docs/RELIABILITY.md) §G1 — per-workload resource quotas |
+| "ARIES crash recovery" | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §Recovery · soak evidence in Releases |
+| "pgwire compatible" | [`docs/SQL_COMPATIBILITY.md`](docs/SQL_COMPATIBILITY.md) — full compatibility matrix |
+| "Evidence-gated releases" | SHA-256 signed tarballs + evidence pack in [GitHub Releases](../../releases) |
+| Benchmarks | 🔜 Reproducible benchmark kit ships with v0.7 Open Beta |
+
+---
+
 ## Where to find what
 
 | You need | Where |
@@ -233,11 +249,13 @@ Concept reference: [angarabase.dev → Concepts](https://angarabase.dev/concepts
 | **Project website** | [`angarabase.com`](https://angarabase.com) |
 | **Documentation** (canonical) | [`angarabase.dev`](https://angarabase.dev) |
 | **Installation packages** | [GitHub Releases](../../releases) · [`PACKAGES.md`](PACKAGES.md) |
+| **PostgreSQL compatibility matrix** | [`docs/SQL_COMPATIBILITY.md`](docs/SQL_COMPATIBILITY.md) |
+| **Reliability guarantees & failure modes** | [`docs/RELIABILITY.md`](docs/RELIABILITY.md) |
+| **Architecture overview** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| **Architectural contracts** | [`contracts/`](contracts/) |
+| **Project principles** | [`docs/PROJECT_PRINCIPLES.md`](docs/PROJECT_PRINCIPLES.md) |
 | **Bugs, questions, feedback** | [GitHub Issues](../../issues) |
 | **Discussions, use cases, ideas** | [GitHub Discussions](../../discussions) |
-| **Architectural contracts** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`contracts/`](contracts/) |
-| **Project principles** | [`docs/PROJECT_PRINCIPLES.md`](docs/PROJECT_PRINCIPLES.md) |
-| **Supported SQL subset** | [angarabase.dev → SQL Reference](https://angarabase.dev/sql-reference/) |
 | **Current status & focus** | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) |
 | **Announcements (RU)** | [Telegram @angarabase](https://t.me/angarabase) |
 | **Announcements (EN)** | X — *coming soon* |
