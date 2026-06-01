@@ -34,9 +34,9 @@ and the related code cannot merge. This is enforced by CI.
 
 ## Canonical documentation
 
-- Architecture overview: [`docs/01_ARCHITECTURE.md`](docs/01_ARCHITECTURE.md)
-- Project principles (fail-closed philosophy): [`docs/00_PROJECT_PRINCIPLES.md`](docs/00_PROJECT_PRINCIPLES.md)
-- Supported SQL subset: [`docs/technical_specs/v1_supported_sql_subset.md`](docs/technical_specs/v1_supported_sql_subset.md)
+- Architecture overview: [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)
+- Project principles (fail-closed philosophy): [`docs/PROJECT_PRINCIPLES.md`](../docs/PROJECT_PRINCIPLES.md)
+- Supported SQL subset: [angarabase.dev → SQL Reference](https://angarabase.dev/sql-reference/)
 - Project website: [angarabase.com](https://angarabase.com)
 - Full documentation: [angarabase.dev](https://angarabase.dev)
 

@@ -39,7 +39,7 @@ lives elsewhere and accepting edits here would create divergence.
 Post in [Discussions](../../discussions). Proposals that gain consensus go through the
 internal RFC process. The RFC is then referenced in the release train where it lands.
 
-RFCs are referenced in `docs/01_ARCHITECTURE.md` and documented on
+RFCs are referenced in `docs/ARCHITECTURE.md` and documented on
 [angarabase.dev](https://angarabase.dev) after graduation.
 
 ### 5. Design partnership

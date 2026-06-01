@@ -196,5 +196,5 @@ preventing silent corruption from version mismatches.
 
 - `contracts/admission_control.rs` — machine-readable resource boundary contract
 - `contracts/table_engine.rs` — `TableEngine` trait specification
-- [RELEASES.md](RELEASES.md) — how releases are verified (GPG, SHA-256, evidence pack)
+- [RELEASES.md](../RELEASES.md) — how releases are verified (GPG, SHA-256, evidence pack)
 - [angarabase.dev](https://angarabase.dev) — full documentation and runbooks

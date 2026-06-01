@@ -35,9 +35,9 @@ If a decision contradicts a principle, an RFC with justification is required.
 11. [Performance-first (with caveats)](#11-performance-first)
 12. [Modularity and Evolution](#12-modularity-and-evolution)
 13. [Documentation and Process Discipline](#13-documentation-and-process-discipline)
-14. [Frequent Small Changes (Controlled Risk)](#14-frequent-small-changes)
+14. [Frequent Small Changes (Controlled Risk)](#14-frequent-small-changes-controlled-risk)
 15. [Minimal Dependencies and Supply Chain Security](#15-minimal-dependencies)
-16. [What We Are Not Doing (yet)](#16-what-we-are-not-doing)
+16. [What We Are Not Doing (yet)](#16-what-we-are-not-doing-yet)
 
 ---
 

@@ -18,10 +18,10 @@ The tarball works on any compatible Linux system without a package manager.
 ```bash
 # Download from GitHub Releases (replace <version> and <arch>):
 curl -LO https://github.com/angarabase/angarabase/releases/download/v<version>/angarabase-<version>-<arch>-unknown-linux-gnu.tar.gz
-curl -LO https://github.com/angarabase/angarabase/releases/download/v<version>/sha256sums.txt
+curl -LO https://github.com/angarabase/angarabase/releases/download/v<version>/SHA256SUMS
 
 # Verify integrity:
-sha256sum -c sha256sums.txt --ignore-missing
+sha256sum -c SHA256SUMS --ignore-missing
 
 # Extract and run:
 mkdir -p /opt/angarabase
@@ -177,4 +177,4 @@ gpg --verify angarabase-<version>-x86_64-unknown-linux-gnu.tar.gz.asc
 ```
 
 The full key fingerprint and release signing policy:
-[angarabase.dev → Security](https://angarabase.dev/reference/security.html).
+[angarabase.dev → Security](https://angarabase.dev/security/overview.html).

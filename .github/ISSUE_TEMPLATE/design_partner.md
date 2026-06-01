@@ -34,4 +34,4 @@ assignees: ''
 ---
 
 *Design partner capacity is limited to 5 active teams per release cycle.
-See [angarabase.dev → Design Partner Program](https://angarabase.dev/community/design-partner.html) for the full program description.*
+See [angarabase.dev → Design Partner Program](https://angarabase.dev) for the full program description or reach out via [Discussions](https://github.com/angarabase/angarabase/discussions).*

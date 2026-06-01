@@ -59,7 +59,7 @@ sha256sum -c SHA256SUMS --ignore-missing
 ```
 
 The release key fingerprint and signing policy:
-[angarabase.dev → Security](https://angarabase.dev/reference/security.html).
+[angarabase.dev → Security](https://angarabase.dev/security/overview.html).
 
 ---
 
