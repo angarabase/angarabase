@@ -13,12 +13,20 @@
 ![HTAP](https://img.shields.io/badge/workload-OLTP_%2B_HTAP-6366f1)
 ![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1_%E2%86%92_Apache_2.0_by_2030-22c55e)
 ![RFC](https://img.shields.io/badge/design-via_RFCs-a78bfa)
-![Status](https://img.shields.io/badge/status-dev_preview-f59e0b)
+![Status](https://img.shields.io/badge/status-private_preview-8b5cf6)
 ![Community Hub](https://img.shields.io/badge/this_repo-community_hub-34d399)
 
 ### 🌐 [angarabase.com](https://angarabase.com) · 📖 [angarabase.dev](https://angarabase.dev) · 🗺 [Roadmap](ROADMAP.md) · 📦 [Releases](../../releases) · 🐛 [Issues](../../issues) · 💬 [Discussions](../../discussions)
 
 </div>
+
+---
+
+> **AngaraBase is currently in private preview with select design partners.**
+> The public benchmark kit (CH-benCHmark / TPC-C + TPC-H mixed) and installation packages
+> will be published with the **v0.7 Open Beta**.
+> If you are evaluating AngaraBase for a real workload, [start a Discussion](../../discussions) or
+> reach out via [Telegram @angarabase](https://t.me/angarabase).
 
 ---
 
@@ -238,7 +246,7 @@ Every strong statement in this README is backed by a verifiable artifact:
 | "ARIES crash recovery" | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §Recovery · soak evidence in Releases |
 | "pgwire compatible" | [`docs/SQL_COMPATIBILITY.md`](docs/SQL_COMPATIBILITY.md) — full compatibility matrix |
 | "Evidence-gated releases" | SHA-256 signed tarballs + evidence pack in [GitHub Releases](../../releases) |
-| Benchmarks | 🔜 Reproducible benchmark kit ships with v0.7 Open Beta |
+| Benchmarks | 🔜 **CH-benCHmark** (TPC-C + TPC-H concurrent) kit ships with v0.7 Open Beta — [benchmark methodology →](docs/RELIABILITY.md) |
 
 ---
 

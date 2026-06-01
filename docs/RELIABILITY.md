@@ -123,20 +123,29 @@ Each kit includes:
 - Exact commands to reproduce
 - Raw results (CSV) + summary (p50 / p95 / p99 / throughput)
 
+**Target benchmark: [CH-benCHmark](https://github.com/ClickHouse/ch-benchmark)**
+
+For HTAP validation, a simple TPC-C or TPC-H in isolation is insufficient —
+they test OLTP and OLAP separately. The correct HTAP benchmark is
+**CH-benCHmark** (used by TiDB, SingleStore, and ClickHouse for HTAP validation):
+it runs TPC-C and TPC-H *concurrently on the same schema*, measuring both throughput
+and the degree to which analytics degrades OLTP p99 latency.
+
 **Planned benchmark scenarios:**
 
-| Scenario | Target comparison |
-|---|---|
-| Single-threaded OLTP latency (simple SELECT, INSERT) | PostgreSQL 18.3 |
-| TPC-C-like mixed OLTP (16–64 connections) | PostgreSQL 18.3, TiDB |
-| Analytical (TPC-H subset) while OLTP running | ClickHouse (OLAP only), TiDB (HTAP) |
-| p99 OLTP latency during heavy analytical scan | PostgreSQL (degradation baseline) |
-| Crash recovery time (WAL replay) | PostgreSQL 18.3 |
-| Replica lag under write-heavy load | PostgreSQL streaming replication |
-| Ingest rate (bulk INSERT) | PostgreSQL 18.3, ClickHouse |
+| Scenario | Method | Target comparison |
+|---|---|---|
+| OLTP throughput (transactions/sec) | CH-benCHmark TPC-C part | PostgreSQL 18.3, TiDB |
+| Analytical query latency (TPC-H queries 1–22) | CH-benCHmark TPC-H part | ClickHouse (OLAP only), TiDB (HTAP) |
+| **OLTP p99 latency during concurrent analytics** | CH-benCHmark mixed mode | PostgreSQL 18.3 (degradation baseline), TiDB |
+| Single-threaded OLTP latency (simple SELECT, INSERT) | micro-benchmark | PostgreSQL 18.3 |
+| Crash recovery time (WAL replay) | restart test | PostgreSQL 18.3 |
+| Replica lag under write-heavy load | streaming replication test | PostgreSQL 18.3 streaming replication |
+| Ingest rate (bulk INSERT) | `COPY` benchmark | PostgreSQL 18.3, ClickHouse |
 
-> Key claim to validate: *"A concurrent TPC-H scan does not degrade TPC-C p99 latency
-> beyond the configured analytical CPU budget."*
+> Key claim to validate: *"CH-benCHmark mixed mode — concurrent TPC-H analytical queries
+> do not degrade TPC-C p99 latency beyond the configured workload-class CPU budget."*
+> This is the only test that falsifies the core HTAP isolation guarantee.
 
 Until v0.7 benchmarks are published, claims about performance are based on internal
 soak tests (evidence packs in Releases) — not independently reproducible numbers.
