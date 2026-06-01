@@ -102,7 +102,7 @@ No release is published without a passing soak gate.
 
 ### Not handled (known limitations, pre-v0.9)
 
-- **Split-brain in multi-node** — auto-failover (Raft) is planned for v0.7; manual failover available now.
+- **Split-brain in multi-node** — consensus-based auto-failover is planned for v0.7; manual failover available now.
 - **Gray failure (partial network partition)** — not yet covered by automated fencing.
 - **Disk silent data corruption (bit rot)** — CRC32C detects most cases; scrubbing not yet automated.
 
@@ -127,13 +127,13 @@ Each kit includes:
 
 | Scenario | Target comparison |
 |---|---|
-| Single-threaded OLTP latency (simple SELECT, INSERT) | PostgreSQL 16 |
-| TPC-C-like mixed OLTP (16–64 connections) | PostgreSQL 16, TiDB |
+| Single-threaded OLTP latency (simple SELECT, INSERT) | PostgreSQL 18.3 |
+| TPC-C-like mixed OLTP (16–64 connections) | PostgreSQL 18.3, TiDB |
 | Analytical (TPC-H subset) while OLTP running | ClickHouse (OLAP only), TiDB (HTAP) |
 | p99 OLTP latency during heavy analytical scan | PostgreSQL (degradation baseline) |
-| Crash recovery time (WAL replay) | PostgreSQL 16 |
+| Crash recovery time (WAL replay) | PostgreSQL 18.3 |
 | Replica lag under write-heavy load | PostgreSQL streaming replication |
-| Ingest rate (bulk INSERT) | PostgreSQL 16, ClickHouse |
+| Ingest rate (bulk INSERT) | PostgreSQL 18.3, ClickHouse |
 
 > Key claim to validate: *"A concurrent TPC-H scan does not degrade TPC-C p99 latency
 > beyond the configured analytical CPU budget."*
@@ -162,7 +162,7 @@ We say this explicitly rather than in a footnote.
 | Layer | Status |
 |---|---|
 | SQL logic tests (pgregress subset) | 🔜 v0.7 (Open Beta gate) |
-| Jepsen-style distributed invariant tests | 🔜 v0.7 (with auto-failover) |
+| Jepsen-style distributed invariant tests | 🔜 v0.7 (with HA) |
 | Reproducible public benchmark kit | 🔜 v0.7 |
 | Chaos engineering harness (network partition, node crash drills) | 🔜 v0.7 |
 | fsync / power-loss style tests (disk-level) | 🔜 v0.7 |
@@ -177,7 +177,7 @@ We say this explicitly rather than in a footnote.
 | OLTP correctness | ✅ | ✅ | ✅ |
 | ARIES crash recovery | ✅ | ✅ | ✅ |
 | Streaming replication | ✅ | ✅ | ✅ |
-| Auto-failover (HA) | ❌ manual only | ✅ Raft | ✅ |
+| Auto-failover (HA) | ❌ manual only | ✅ built-in consensus | ✅ |
 | Reproducible benchmarks | ❌ internal only | ✅ public | ✅ |
 | SQL logic test suite | ❌ | ✅ | ✅ |
 | On-disk format stability | ❌ pre-release | ⚠️ beta | ✅ stable |

@@ -1,196 +1,351 @@
 
 # AngaraBase — Design Decisions & Unique Properties
 
-This document explains the engineering choices that make AngaraBase different
-from PostgreSQL, TiDB, and the Postgres-plus-ClickHouse stack — and why those
-choices matter in practice.
+This document explains what makes AngaraBase architecturally different from PostgreSQL,
+TiDB, and the Postgres + ClickHouse stack. Every property described here is either
+delivered in the current release or explicitly marked as roadmap.
 
 ---
 
-## 1. Fail-closed resource contracts
+## 1. Five storage engine types in one instance — mix per table, join across
 
-Most databases degrade silently: under memory pressure they spill to disk without
-warning; under connection pressure they queue invisibly; under write pressure they
-slow down until someone notices on a dashboard.
+Every table in AngaraBase is backed by a **`TableEngine`** trait implementation.
+Tables with different engines can coexist in the same database and be joined in
+a single query. The storage manager routes DML to the correct engine transparently.
 
-AngaraBase takes the opposite approach. **Every resource boundary is a contract:**
+```sql
+-- Row store: durable OLTP
+CREATE TABLE orders (
+    id      BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    amount  NUMERIC(12,2)
+) ENGINE = heap;
 
-- Declared in source code (`contracts/admission_control.rs`)
-- Observable as a Prometheus metric (same name, always)
-- Enforced by returning an explicit `SQLSTATE` error *before* the incident
+-- Ephemeral hot cache: fastest possible reads/writes, no durability
+CREATE TABLE session_cache (
+    session_id TEXT PRIMARY KEY,
+    payload    BYTEA
+) ENGINE = memory DURABILITY = none;
 
-There are no soft limits that gradually degrade. There is no silent queuing that hides
-backpressure. When a boundary is reached, the offending operation fails fast with
-a deterministic error code — and the rest of the system continues unaffected.
+-- WAL-backed in-memory: survives restart without snapshot overhead
+CREATE TABLE rate_limits (
+    key   TEXT PRIMARY KEY,
+    count BIGINT,
+    ts    TIMESTAMPTZ
+) ENGINE = memory DURABILITY = logged;
 
-**Why this matters:** a billing service and an analytics job share the same instance.
-The analytics job exhausts its write-set budget (`54023`) and rolls back. The billing
-service never notices. This is the difference between *co-location* and *isolation*.
+-- Columnar analytics: SIMD-accelerated scans, HTAP workloads
+CREATE TABLE events_col (
+    event_id  BIGSERIAL,
+    user_id   BIGINT,
+    action    TEXT,
+    created   TIMESTAMPTZ
+) ENGINE = column;
 
-Reference: [`contracts/admission_control.rs`](../contracts/admission_control.rs)
+-- Single query across all engines simultaneously
+SELECT o.user_id, COUNT(e.event_id), s.payload
+FROM   orders o
+JOIN   events_col e  ON e.user_id = o.user_id
+JOIN   session_cache s ON s.session_id = o.user_id::text
+WHERE  o.amount > 100
+GROUP BY o.user_id, s.payload;
+```
 
----
+| Engine | Durability tier | MVCC | Best for |
+|---|---|---|---|
+| `heap` (row store, default) | Full WAL + fsync | UNDO-log | OLTP, systems of record |
+| `memory DURABILITY = none` | None (lost on restart) | In-memory snapshot | Ephemeral caches, temp aggregates |
+| `memory DURABILITY = logged` | WAL only (survives restart) | In-memory snapshot | Hot working sets, rate limiters |
+| `memory DURABILITY = snapshotted` | WAL + periodic checkpoint | In-memory snapshot | Low-latency + crash recovery |
+| `column` (AngaraColumn) | Full WAL + columnar format | Shared MVCC contour | HTAP analytics, bulk scans |
 
-## 2. UNDO-log MVCC — the Oracle/InnoDB model, not PostgreSQL's
-
-PostgreSQL uses *heap-based MVCC*: old row versions accumulate in the heap, and
-a background VACUUM process cleans them up. VACUUM competes with live queries,
-causes heap bloat, and produces unpredictable maintenance windows.
-
-AngaraBase uses *UNDO-log MVCC* — the same model as Oracle and InnoDB:
-
-- The **heap holds only current (latest committed) row versions**
-- Historical versions live in a **separate UNDO log**, outside the heap
-- VACUUM does not exist — there is nothing to clean up in the heap
-- Snapshot visibility is **deterministic**: a transaction's read view is a function
-  of its start LSN, not of whether VACUUM has run
-
-The UNDO log is itself a bounded resource (contract: `undo_max_size_mb` / SQLSTATE `53100`).
-Long-running transactions that produce excessive UNDO volume are rejected before they
-exhaust the budget, not after the instance runs out of disk.
-
-**Why this matters:** predictable write amplification, no autovacuum storms, no
-maintenance windows, no "table bloat" tickets at 3 AM.
-
-Reference: [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) §Storage
-
----
-
-## 3. Three storage engine types in a single instance — mix per table, join across
-
-Every table in AngaraBase is backed by a **`TableEngine`** trait. The same query
-can read from tables backed by different engines simultaneously. No ETL, no
-materialized intermediate.
-
-| Engine | Durability | Use case |
-|---|---|---|
-| **Row store** (default) | Full WAL + UNDO-log MVCC | OLTP, system of record |
-| **AngaraMemory — `none` tier** | None (lost on restart) | Ephemeral hot working sets, caches |
-| **AngaraMemory — `logged` tier** | WAL-backed (survives restart) | Session state, hot aggregations |
-| **AngaraMemory — `snapshotted` tier** | Periodic snapshot + WAL | Pre-aggregated views, read-heavy |
-| **AngaraColumn** | WAL + columnar format | HTAP analytics, SIMD-accelerated scans |
-
-A single query can join `orders` (row store, OLTP) with `daily_summary` (AngaraColumn,
-pre-aggregated) and `session_cache` (AngaraMemory/none, ephemeral) — without any
-external data movement.
-
-**Coming in v0.8: table partitioning** — declarative `PARTITION BY RANGE / LIST / HASH`
-with automatic partition pruning and partition-local indexes. Partitions can use
-different storage engines (e.g., recent partitions in row store, historical in
-AngaraColumn). This enables automatic tiering of aging data within a single table.
+The engine is declared at `CREATE TABLE` time and is immutable (stored in catalog).
+All engines expose the same SQL interface — there is no separate "columnar SQL dialect."
 
 Reference: [`contracts/table_engine.rs`](../contracts/table_engine.rs)
 
 ---
 
-## 4. HTAP with contractual workload isolation — not just co-location
+## 2. Query-level service levels — `SET service_level`
 
-Most databases that claim "HTAP" put OLTP and OLAP in the same process and rely
-on the scheduler to be fair. Under real workload pressure, long analytical scans
-consume CPU and memory, causing OLTP latency to spike.
-
-AngaraBase uses **per-workload-class resource quotas** backed by the fail-closed
-contract model (see §1). The analytical workload class has its own CPU budget,
-memory limit, and write-set cap. When the analytical job hits its budget, it receives
-a `SQLSTATE` error and rolls back. The OLTP path — running under its own contract —
-continues with no measurable impact.
-
-The contracts are not soft hints. They are engine-level enforcement points.
-
-**Planned: Query SLA contexts (v0.7+)**
-
-Each session or query will be assignable to a named workload class with explicit
-resource constraints:
+**Delivered today.** Each session or query can declare its service level, which maps
+directly to I/O scheduling priority:
 
 ```sql
-SET angara.workload_class = 'analytics';
--- or per-statement:
-SELECT /*+ workload_class(analytics) */ ...
+-- Latency-critical path (billing, authentication)
+SET service_level = 'critical';
+
+-- Normal interactive queries
+SET service_level = 'interactive';   -- default
+
+-- Background analytics, batch jobs
+SET service_level = 'background';
 ```
 
-The workload class defines CPU budget, memory cap, and UNDO quota.
-Breaching any limit returns a deterministic `SQLSTATE` and does not affect
-sessions in other workload classes.
+| Level | I/O priority | Intended workload |
+|---|---|---|
+| `critical` | High | Billing, auth, real-time user-facing queries |
+| `interactive` | High | Normal application queries (default) |
+| `background` | Low | Analytical scans, batch exports, maintenance |
+
+Setting `critical` requires the `SET_CRITICAL_QOS` privilege — it cannot be abused
+by unprivileged sessions to jump the priority queue. Privilege denial returns
+`SQLSTATE 42601` (fail-closed, information-hiding).
+
+**Coming in v0.7: named workload classes with resource quotas.** Beyond I/O priority,
+each workload class will carry explicit CPU budget, memory cap, and UNDO quota.
+When an analytical workload class hits its budget, it receives a `SQLSTATE` error
+and rolls back — the OLTP path continues unaffected.
+
+```sql
+-- v0.7 planned syntax
+SET angara.workload_class = 'analytics_tier';
+-- or per-statement via hint
+SELECT /*+ workload_class(analytics_tier) */ ...
+```
 
 ---
 
-## 5. AngaraStream — built-in event bus, no external broker
+## 3. Fail-closed resource contracts — errors before incidents
 
-AngaraBase ships with two levels of pub/sub:
+**Delivered today.** Every resource boundary is declared in source code, observable
+as a Prometheus metric, and enforced by returning an explicit `SQLSTATE` *before*
+the incident — not after silent degradation.
 
-**Level 0 — Ephemeral LISTEN/NOTIFY (delivered today):**
-The standard PostgreSQL `LISTEN` / `NOTIFY` / `UNLISTEN` commands, implemented
-with a per-channel sharded dispatcher (64 shards). Notifications are transactional:
-inside a transaction they are deferred to `COMMIT`; on `ROLLBACK` they are discarded.
-Delivery guarantee: at-most-once (ephemeral — no persistence, no replay).
+There are eight named boundaries:
+
+| Boundary | SQLSTATE | When breached |
+|---|---|---|
+| UNDO store disk budget | `53100` | Reject DML; GC cycle; wait or error |
+| Buffer pool memory | `53200` | Evict pages; OOM guard rejects |
+| Concurrent query admission | `53300` | Reject immediately; no queuing |
+| Connection limit | `53300` | Reject TCP connection |
+| Per-transaction write set | `54023` | Reject DML; transaction must rollback |
+| AngaraMemory row capacity | `53000` | Reject INSERT; no silent drop |
+| Statement timeout | `57014` | Cancel statement; transaction rolls back |
+| Snapshot age (stale txn) | `40001` | Force-close snapshot |
+
+The critical property: **an analytical workload hitting its limit does not degrade
+the OLTP path.** Each workload class has its own contract scope.
+
+Reference: [`contracts/admission_control.rs`](../contracts/admission_control.rs)
+
+---
+
+## 4. UNDO-log MVCC — no VACUUM, no heap bloat
+
+PostgreSQL uses heap-based MVCC: dead row versions accumulate in the heap and
+VACUUM must periodically reclaim space. VACUUM competes with live queries, causes
+heap bloat, and produces unpredictable maintenance windows at scale.
+
+AngaraBase uses **UNDO-log MVCC** (Oracle / InnoDB model):
+- The heap holds **only current (latest committed) row versions**
+- Historical versions live in a **separate, bounded UNDO log**
+- VACUUM does not exist. No autovacuum storms. No heap bloat. No maintenance windows.
+- Snapshot visibility is deterministic: a read view is a function of its start LSN,
+  not of whether any cleanup has run
+
+**Writers never block readers.** A long-running `SELECT` does not prevent `INSERT`/`UPDATE`/`DELETE`,
+and vice versa.
+
+The UNDO log itself is a bounded resource (contract `undo_max_size_mb` / `SQLSTATE 53100`).
+Long-running transactions that produce excessive UNDO volume are rejected before they
+exhaust the budget — the system never silently runs out of UNDO space.
+
+---
+
+## 5. Tablespaces — per-table filesystem placement
+
+**Delivered today.** Tables, indexes, and whole databases can be assigned to
+**named tablespaces** that map to specific filesystem locations. This enables:
+
+- **Hot/cold tiering** — place recent partitions on NVMe, historical data on HDD or
+  network storage
+- **I/O isolation** — billing tables on a dedicated SSD, analytics on a separate
+  volume
+- **Compliance** — certain data stored on encrypted volumes or specific mount points
+
+```sql
+-- Create a tablespace on a fast NVMe mount
+CREATE TABLESPACE ts_nvme LOCATION '/mnt/nvme/angara_data';
+
+-- Create a tablespace on archive storage
+CREATE TABLESPACE ts_archive LOCATION '/mnt/archive/angara_data';
+
+-- Assign tables at creation time
+CREATE TABLE orders (...) TABLESPACE ts_nvme;
+CREATE TABLE orders_2023 (...) TABLESPACE ts_archive;
+
+-- Move a table to a different tablespace (online)
+ALTER TABLE orders SET TABLESPACE ts_nvme;
+```
+
+The tablespace location is stored in the system catalog. On startup, AngaraBase
+verifies that all declared tablespace locations are reachable — if a tablespace
+directory is missing, affected databases are marked unavailable and reported as
+`SQLSTATE` errors. No silent data loss.
+
+---
+
+## 6. Backup v2 — streaming archive with integrity verification
+
+**Delivered today (Phase 1a).** AngaraBase ships with a built-in backup subsystem
+(`angarabase-admin`) that supports:
+
+- **Online backup** — taken without stopping the server, while writes continue
+- **Columnar-aware backup** — the columnar engine (AngaraColumn) has a dedicated
+  backup path that understands its internal format
+- **Immutable archive** — backup artifacts are write-once; the archive layer rejects
+  overwriting an existing artifact (fail-closed: `backup_archive_reject_total` counter)
+- **Integrity verification** — each archive entry includes a checksum; `inspect` /
+  `verify` commands confirm integrity before restore
+- **Streaming restore** — restore from archive to a new instance without copying
+  the full backup to local disk first
+
+**Coming: PITR (Point-in-Time Recovery)** via continuous WAL archiving. ARIES
+crash recovery already provides single-node PITR within the WAL retention window;
+v0.7 extends this to long-term archive with configurable retention.
+
+```bash
+# Take an online backup
+angara-admin backup create --output /mnt/backup/$(date +%Y%m%d)
+
+# Verify archive integrity
+angara-admin backup verify --archive /mnt/backup/20260601
+
+# Restore to a new instance
+angara-admin backup restore --archive /mnt/backup/20260601 --data-dir /var/lib/angara-restore
+```
+
+---
+
+## 7. Table partitioning — declarative, with per-partition engine selection *(v0.8)*
+
+**Coming in v0.8.** Declarative `PARTITION BY RANGE / LIST / HASH` with:
+
+- **Automatic partition pruning** — the query planner skips partitions outside
+  the filter range at planning time
+- **Per-partition storage engine** — recent partitions in row store (fast writes),
+  historical partitions in AngaraColumn (fast analytical scans). Automatic tiering
+  within a single logical table.
+- **Online partition management** — `ATTACH PARTITION` / `DETACH PARTITION` without
+  locking the parent table
+
+```sql
+CREATE TABLE events (
+    event_id BIGSERIAL,
+    user_id  BIGINT,
+    action   TEXT,
+    created  TIMESTAMPTZ NOT NULL
+) PARTITION BY RANGE (created);
+
+-- Recent partition on row store (NVMe, fast ingest)
+CREATE TABLE events_2026_06
+    PARTITION OF events
+    FOR VALUES FROM ('2026-06-01') TO ('2026-07-01')
+    ENGINE = heap TABLESPACE ts_nvme;
+
+-- Historical partition in columnar engine (SSD, fast analytics)
+CREATE TABLE events_2026_01
+    PARTITION OF events
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01')
+    ENGINE = column TABLESPACE ts_archive;
+```
+
+---
+
+## 8. AngaraStream — built-in event bus, no external broker
+
+**Level 0 — LISTEN/NOTIFY (delivered today):**
+Transactional pub/sub with a per-channel sharded dispatcher. Notifications are
+deferred inside a transaction and dispatched on `COMMIT`; discarded on `ROLLBACK`.
+At-most-once delivery guarantee. No external message broker required.
+
+```sql
+-- Publisher
+NOTIFY orders_channel, '{"order_id": 42, "status": "paid"}';
+
+-- Subscriber (any connected session)
+LISTEN orders_channel;
+```
 
 **Level 1 — WAL-based CDC with delivery guarantees (v0.7):**
-AngaraStream Phase 1 provides WAL logical decoding, per-row CDC events with
-at-least-once delivery, and connectors to Kafka and NATS. This replaces the need
-for Debezium or a separate CDC pipeline entirely.
-
-**Why this matters:** many architectures use Postgres + Kafka + Debezium just to get
-reliable change events from the database. AngaraBase eliminates that layer — the
-event bus is part of the engine, not a separate system.
+Logical decoding of the WAL with per-row CDC events. At-least-once delivery.
+Connectors to Kafka and NATS. Replaces Debezium or a separate CDC pipeline.
 
 ---
 
-## 6. Linux-native observability — metrics, probes, and structured logs
+## 9. ARIES crash recovery — deterministic, evidence-based
 
-AngaraBase is instrumented at three levels:
+The recovery path follows the **ARIES** protocol (Analysis → Redo → Undo, with
+Compensation Log Records):
 
-**Prometheus metrics** — every resource boundary has a gauge or counter. The
-endpoint is always on; there is no opt-in. Alerting rules can be written directly
-against contract metrics (e.g., `angarabase_undo_store_bytes_used > 0.8 * limit`).
+| Recovery phase | What happens |
+|---|---|
+| **Analysis** | Scan WAL from last checkpoint; build dirty page table and active txn set |
+| **Redo** | Replay all logged operations from Analysis start LSN to WAL end |
+| **Undo** | Roll back all transactions that were active at crash time using CLR |
 
-**USDT probes** — User Statically Defined Tracing probes at critical paths:
+Key properties:
+- Recovery time is **proportional to WAL since last checkpoint**, not data size
+- Torn writes are detected via **CRC32C page checksums** before redo
+- The same recovery contour covers both heap and columnar storage
+- No manual intervention required after crash — recovery is automatic on next start
+
+---
+
+## 10. Linux-native observability — three layers, zero extra agents
+
+**Layer 1 — Prometheus metrics:** every resource boundary, every engine, every
+workload class has a gauge or counter. The endpoint is always active; there is no
+opt-in toggle.
+
+**Layer 2 — USDT probes:** User Statically Defined Tracing probes at:
 `probe_query_start` / `probe_query_end`, `probe_phase_*`, `probe_operator_*`,
-`probe_parallel_agg_*`. These are zero-overhead when not attached and work with
-`bpftrace`, `perf record`, and `eBPF` tracers without any instrumentation agent.
+`probe_parallel_agg_*`. Attach with `bpftrace`, `perf record`, or eBPF — zero
+overhead when not attached.
 
-**Structured logs** — every log line has stable field names (JSON-compatible).
-Log parsers do not need to be updated when message text changes; only the field
-schema is stable.
+**Layer 3 — Structured logs:** JSON-compatible, stable field names. Log parsers
+survive message-text changes.
 
-This makes AngaraBase debuggable at the kernel level without adding an agent sidecar,
-a tracing SDK, or a proprietary monitoring plugin.
+No sidecar agent. No SDK. No proprietary plugin.
 
 ---
 
-## 7. Evidence-gated release discipline
+## 11. Evidence-gated release discipline
 
-"Fast" and "reliable" are claims. AngaraBase treats them as artifacts to be verified,
-not adjectives to be asserted.
+Every release train closes on a **24-hour soak test** and a **pinned benchmark**.
+Evidence packs (logs, metrics, raw benchmark CSV, SHA-256 checksums) are shipped
+inside the release tarball.
 
-Every release train closes on:
-- A **24-hour soak test** — production-representative workload, continuous
-- A **pinned benchmark run** — specific hardware, dataset, scale factor, isolation level
-- A **SHA-256 signed tarball** with evidence pack included
+Starting v0.7 Open Beta, benchmark kits will be **publicly reproducible**:
+exact hardware profile, dataset, isolation level, durability settings, commands.
 
-The evidence pack ships inside the release archive and is archived in GitHub Releases.
-No release is published without a passing soak gate.
-
-Starting v0.7 Open Beta, benchmark kits will be **publicly reproducible**: hardware
-profile, dataset, exact commands, raw CSV results. Not "we ran it and it was fast" —
-"here is how you reproduce this on equivalent hardware."
+Full comparison baseline: **PostgreSQL 18.3** (OLTP), **ClickHouse 24.x** (OLAP),
+**TiDB 8.x** (HTAP).
 
 ---
 
-## Coming: what makes the next releases different
+## Summary — capabilities at a glance
 
-| Feature | Version | Design note |
+| Property | Status | Unique aspect |
 |---|---|---|
-| Query SLA workload contexts | v0.7 | Per-session/query workload class assignment with CPU/mem/UNDO quotas |
-| Table partitioning (RANGE, LIST, HASH) | v0.8 | Partition-local indexes; mixed storage engines per partition |
-| AngaraTuner — automatic memory advisor | v0.7 | Runtime `shared_buffers` / `work_mem` guidance without manual tuning |
-| HA auto-failover (Raft) | v0.7 | No external coordinator (Patroni/etcd); built-in leader election |
-| WAL-based CDC (AngaraStream Phase 1) | v0.7 | Kafka/NATS connectors; at-least-once delivery; replaces Debezium |
-| Tiered storage (NVMe + S3) | v0.7 | Hot/warm/cold tier; automatic data migration |
-| WASM UDF sandbox | v0.7 | Polyglot UDFs (Rust, C, Go) in a WASM-isolated environment |
-
-Full roadmap: [ROADMAP.md](../ROADMAP.md)
+| Five storage engines, mixed in one query | ✅ | No other OLTP database offers `memory DURABILITY = none` alongside columnar HTAP |
+| Query service levels (`SET service_level`) | ✅ | I/O priority scheduling per session, privilege-gated |
+| Fail-closed resource contracts | ✅ | 8 named limits, each with `SQLSTATE` + Prometheus metric |
+| UNDO-log MVCC (no VACUUM) | ✅ | Heap holds only current versions; maintenance-free |
+| Tablespaces (per-table filesystem placement) | ✅ | NVMe/HDD/archive tiering without ETL |
+| Backup v2 with integrity verification | ✅ | Online, columnar-aware, immutable archive |
+| LISTEN/NOTIFY (transactional) | ✅ | No external broker for ephemeral pub/sub |
+| ARIES crash recovery | ✅ | Automatic; proportional to WAL, not data size |
+| Linux-native observability (USDT + Prometheus) | ✅ | No sidecar; zero-overhead probes |
+| Named workload classes with resource quotas | 🔜 v0.7 | Full CPU/mem/UNDO isolation per workload class |
+| HA auto-failover (built-in consensus) | 🔜 v0.7 | No external coordinator (Patroni/etcd) |
+| WAL-based CDC (AngaraStream Phase 1) | 🔜 v0.7 | At-least-once; Kafka/NATS connectors |
+| Table partitioning (RANGE/LIST/HASH) | 🔜 v0.8 | Per-partition engine selection (row + column) |
+| Transparent horizontal sharding | 🔜 v0.9 | No application changes required |
 
 ---
 
-*Have a question about a design decision?
+*Questions about a design decision?
 Open a [Discussion](../../discussions) — architectural proposals are welcome.*
