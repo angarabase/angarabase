@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Documentation
+    url: https://angarabase.dev
+    about: Canonical docs — tutorials, how-to guides, SQL reference, operations runbooks.
+  - name: Discussions (questions & ideas)
+    url: https://github.com/angarabase/angarabase/discussions
+    about: Use cases, architectural questions, feature proposals — before opening an issue.

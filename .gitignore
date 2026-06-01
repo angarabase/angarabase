@@ -1,0 +1,17 @@
+# Keep build artifacts out of git history.
+
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+*.dmg
+*.exe
+*.msi
+
+*.sha256
+sha256sums.txt
+
+dist/
+build/
+out/
+
