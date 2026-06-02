@@ -11,7 +11,7 @@
 ![Linux](https://img.shields.io/badge/target-Linux_x86__64%20%7C%20aarch64-00b4d8)
 ![pgwire](https://img.shields.io/badge/protocol-PostgreSQL_pgwire-336791?logo=postgresql&logoColor=white)
 ![HTAP](https://img.shields.io/badge/workload-OLTP_%2B_HTAP-6366f1)
-![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1_%E2%86%92_Apache_2.0_by_2030-22c55e)
+![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-22c55e)
 ![RFC](https://img.shields.io/badge/design-via_RFCs-a78bfa)
 ![Status](https://img.shields.io/badge/status-private_preview-8b5cf6)
 ![Community Hub](https://img.shields.io/badge/this_repo-community_hub-34d399)
