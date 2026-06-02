@@ -99,7 +99,7 @@ PostgreSQL-compatible driver. No extension, no special mode, no proprietary prot
 | `sys.roles` | `role_name` |
 | `sys.user_roles` | `user_name`, `role_name`, `enabled` |
 | `sys.role_privileges` | `role_name`, `privilege`, `enabled` |
-| `sys.audit_log` | `ts_unix_seconds`, `user_name`, `action`, `result`, `reason` |
+| `sys.audit_log` | `ts_unix_seconds`, `user_name`, `action`, `result`, `reason` | In-memory ring (256 events); privileged ops + DML; compliance-grade persistent audit in v0.7 |
 
 ---
 
@@ -226,7 +226,7 @@ The following views expose capabilities that either don't exist in PostgreSQL or
 | **Full column statistics state** | `sys.column_stats` — HLL sketch, histogram bounds, MCV lists, reservoir | `pg_stats` — read-only, partial | Understand exactly what the planner knows; audit statistics staleness |
 | **All Prometheus metrics via SQL** | `sys.metrics` | ❌ No built-in SQL bridge | Query any counter or gauge from `psql` without a separate metrics stack |
 | **Cluster identity + lease state** | `sys.identity.lease_holder_id`, `recovery_mode` | ❌ No equivalent in single-node PG | Diagnose HA failover state and recovery mode from SQL |
-| **Structured audit trail** | `sys.audit_log` — stable fields, queryable | ❌ Requires extension (`pgaudit`) | Zero-config audit; no external log parsing |
+| **Structured audit trail (basic)** | `sys.audit_log` — in-memory ring (256 events), configurable DML | ❌ Requires extension (`pgaudit`) | Zero-config audit ring; no extension needed. Compliance-grade persistent audit in v0.7 |
 | **Learned cardinality model registry** | `sys.learned_models`, `sys.learned_active_models` | ❌ No equivalent | Inspect and manage ML-backed cardinality estimation |
 | **Event stream monitoring** | `sys.stream_subscriptions`, `sys.stream_stats` | ❌ No equivalent | Monitor LISTEN/NOTIFY and WAL-based CDC pipelines |
 | **stat_statements built-in** | `angara_stat_statements` — no extension needed | `pg_stat_statements` (extension, must be installed) | Query performance stats available from day one |

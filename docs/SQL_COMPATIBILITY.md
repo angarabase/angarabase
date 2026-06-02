@@ -263,6 +263,16 @@ For the full SQL reference, runbooks and known edge cases:
 
 > **Full introspection reference:** [`docs/INTROSPECTION.md`](INTROSPECTION.md) — view map, column lists, 20 SQL cookbook queries, and comparison with PostgreSQL.
 
+This section covers two distinct goals: **PostgreSQL compatibility** (what works with existing PG tooling unchanged) and **AngaraBase-native differentiation** (views that expose engine contracts unavailable in PostgreSQL). The tables below are split accordingly.
+
+**Compatibility confidence levels used in this section:**
+
+| Symbol | Meaning |
+|---|---|
+| ✅ | Implemented, tested in CI, used in integration test suite |
+| ⚠️ | Partial — syntax or shape compatible, functionality limited; see notes |
+| 🔜 vX.Y | On roadmap; not available in current release |
+
 AngaraBase provides **three introspection namespaces** queryable via standard `pgwire`:
 
 ### `pg_catalog.*` — PostgreSQL-compatible
@@ -281,8 +291,9 @@ AngaraBase provides **three introspection namespaces** queryable via standard `p
 | `pg_catalog.pg_proc` | ⚠️ | Partial — built-in functions only |
 | `pg_catalog.pg_stat_activity` | ✅ | Via `angara_stat_activity` alias |
 | `pg_catalog.pg_stat_user_tables` | ⚠️ | Partial — via `sys.table_stats` |
+| `pg_catalog.pg_tablespace` | ⚠️ | Schema shape compatible; use `sys.tablespaces` for `location_path` |
 | `pg_catalog.pg_locks` | 🔜 v0.7 | Requires HA / multi-node |
-| `pg_catalog.pg_stat_replication` | ⚠️ | Partial — via Prometheus metric |
+| `pg_catalog.pg_stat_replication` | ⚠️ | No structured view; lag accessible via SQL: `SELECT name, value FROM sys.metrics WHERE name LIKE 'angara_replication_lag%'` |
 | `pg_catalog.pg_stat_progress_*` | 🔜 v0.8 | Progress views |
 
 ### `information_schema.*` — SQL-standard portable
@@ -310,7 +321,7 @@ AngaraBase provides **three introspection namespaces** queryable via standard `p
 | `sys.workload_stats` | ✅ | **No equivalent** — per-workload-class breakdown |
 | `sys.gc_tuning_status` | ✅ | **No equivalent** — UNDO log GC state |
 | `sys.roles`, `sys.user_roles`, `sys.role_privileges` | ✅ | `pg_roles` (partial) |
-| `sys.audit_log` | ✅ | **No equivalent** — structured audit trail |
+| `sys.audit_log` | ✅ | **No equivalent** — in-memory ring (256 events); privileged ops + configurable DML. Compliance-grade persistent audit in v0.7 |
 | `angara_stat_activity` | ✅ | `pg_stat_activity` |
 | `angara_stat_statements` | ✅ | `pg_stat_statements` (built-in, no extension needed) |
 | `angara_stat_wait_events` | ✅ | `pg_stat_activity` wait columns |
@@ -356,7 +367,8 @@ AngaraBase provides **three introspection namespaces** queryable via standard `p
 | Role-based access control (RBAC) | ✅ | `GRANT` / `REVOKE` |
 | Row-level security (RLS) | 🔜 v0.7 | |
 | Column-level masking | 🔜 v0.8 | |
-| Audit log | 🔜 v0.7 | |
+| Audit log — basic (`sys.audit_log`) | ✅ | In-memory ring (256 events); privileged ops + configurable DML |
+| Audit log — compliance-grade (persistent, policy-based) | 🔜 v0.7 | Durable sink, configurable retention, structured export |
 | Break-glass access | 🔜 v0.7 | |
 | TDE (transparent data encryption) | 🔜 v0.8 | |
 | SSL/TLS | ✅ | |
