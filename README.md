@@ -134,9 +134,10 @@ Full compatibility map: [angarabase.dev → SQL Reference](https://angarabase.de
   `perf`, structured logs with stable field names.
 - **Built-in security baseline** — `scram` authentication out of the box, RLS / audit / break-glass on the
   roadmap; no behavior is enabled silently.
-- **Deep introspection** — 60+ system views across `information_schema`, `pg_catalog`, `sys.*`, and
-  `angara_stat_*`. Includes plan store with regression detection, QoS service-level queue state, per-workload
-  table access breakdown, and UNDO log GC status — all queryable via `psql`. See [`docs/INTROSPECTION.md`](docs/INTROSPECTION.md).
+- **Deep introspection** — 60+ system views across four layers: Portable SQL Metadata, PostgreSQL-Compatible
+  Catalog, Runtime Observability Views, and Engine Contract Views. Includes plan store with regression
+  detection, QoS queue state, per-workload table access, and UNDO GC loop status — all via `psql`, no
+  extensions. → [`docs/INTROSPECTION.md`](docs/INTROSPECTION.md) · [`quickstart`](docs/INTROSPECTION_QUICKSTART.md)
 - **Evidence-gated releases** — every release train closes on a 24-hour soak test and a pinned benchmark.
   Correctness is an artifact in `Releases`, not a marketing claim.
 
@@ -263,6 +264,7 @@ Every strong statement in this README is backed by a verifiable artifact:
 | **Installation packages** | [GitHub Releases](../../releases) · [`PACKAGES.md`](PACKAGES.md) |
 | **PostgreSQL compatibility matrix** | [`docs/SQL_COMPATIBILITY.md`](docs/SQL_COMPATIBILITY.md) |
 | **Schema & runtime introspection** | [`docs/INTROSPECTION.md`](docs/INTROSPECTION.md) — view map, cookbook, PG comparison |
+| **Introspection quickstart** | [`docs/INTROSPECTION_QUICKSTART.md`](docs/INTROSPECTION_QUICKSTART.md) — 15 queries, 5 min |
 | **Reliability guarantees & failure modes** | [`docs/RELIABILITY.md`](docs/RELIABILITY.md) |
 | **Design decisions & unique features** | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | **Architecture overview** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |

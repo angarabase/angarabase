@@ -1,144 +1,191 @@
 
 # AngaraBase — Schema & Runtime Introspection
 
-AngaraBase provides a **three-namespace introspection model**:
+> **Quick start:** [`INTROSPECTION_QUICKSTART.md`](INTROSPECTION_QUICKSTART.md)
+> — 15 queries, 5 minutes, understand the full system without reading source code.
 
-| Namespace | Purpose | Compatibility |
-|---|---|---|
-| `information_schema.*` | Portable SQL-standard schema metadata | SQL:2016 / JDBC / ODBC / ORMs |
-| `pg_catalog.*` | PostgreSQL-compatible catalog | psql, pgAdmin, pg drivers, ORMs |
-| `sys.*` / `angara_stat_*` | AngaraBase-native runtime and analytics | AngaraBase-specific, no PG equivalent |
+AngaraBase organizes its introspection surface into **four layers**, each with a distinct purpose.
+All views are queryable via standard `pgwire v3` — connect with `psql`, JDBC, asyncpg, or any
+PostgreSQL-compatible driver. No extension, no special mode, no proprietary protocol.
 
-Connect via any PostgreSQL driver (`psql`, libpq, JDBC, asyncpg, `psycopg`, `node-postgres`).
-All views are queryable over `pgwire v3` without any special extensions.
+| Layer | Namespace | Purpose | Audience |
+|---|---|---|---|
+| **Portable SQL Metadata** | `information_schema.*` | SQL:2016-standard schema objects | ORMs, JDBC/ODBC drivers, cross-DB tooling |
+| **PostgreSQL-Compatible Catalog** | `pg_catalog.*` | Drop-in PostgreSQL catalog compatibility | psql, pgAdmin, Flyway, pg_dump, pg drivers |
+| **Runtime Observability Views** | `angara_stat_*` · `sys.health` · `sys.identity` | Live session, wait, QoS, and checkpoint state | DBAs, SREs, monitoring dashboards |
+| **Engine Contract Views** | `sys.tables` · `sys.gc_tuning_status` · `sys.workload_stats` | Introspect engine-level guarantees and contracts | Platform engineers, HTAP workload designers |
 
 ---
 
-## Layer A — Schema Discovery
+## Layer 1 — Portable SQL Metadata
 
-These views answer: *"What objects exist and how are they structured?"*
+*Use this layer for ORM bootstrap, schema migration tools, and cross-database tooling.*
+*These views follow SQL:2016 and behave identically to standard PostgreSQL.*
 
-### `information_schema` (SQL-standard, portable)
-
-| View | Columns | Use |
+| View | Key columns | Use |
 |---|---|---|
 | `information_schema.tables` | `table_catalog`, `table_schema`, `table_name`, `table_type` | List all tables; ORM introspection |
-| `information_schema.columns` | `table_catalog`, `table_schema`, `table_name`, `column_name`, `data_type`, `is_nullable`, `column_default`, `ordinal_position` | Column metadata; DDL generation |
+| `information_schema.columns` | `table_name`, `column_name`, `data_type`, `is_nullable`, `column_default`, `ordinal_position` | Column metadata; DDL scaffolding |
 | `information_schema.constraint_column_usage` | `table_name`, `column_name`, `constraint_name` | FK/PK column mapping |
 
-### `sys.*` (native AngaraBase schema views)
-
-| View | Key columns | Notes |
-|---|---|---|
-| `sys.databases` | `db_id`, `name` | All databases in the instance |
-| `sys.schemas` | `db_id`, `schema_name` | All schemas in current database |
-| `sys.tables` | `db_id`, `schema_name`, `table_name`, `tablespace_name`, `storage_engine`, `durability`, `max_rows`, `eviction_policy`, `append_only`, `mutation_policy`, `row_count_estimate` | **Includes engine type** (heap/memory/column); no PG equivalent |
-| `sys.columns` | `db_id`, `schema_name`, `table_name`, `column_name`, `type`, `nullable` | Column metadata |
-| `sys.indexes` | `db_id`, `schema_name`, `table_name`, `index_name`, `columns`, `auto_created`, `created_by_constraint` | All indexes including system-created |
-| `sys.constraints` | `db_id`, `schema_name`, `table_name`, `constraint_name`, `kind`, `enforcement_mode`, `trust_status`, `child_columns`, `parent_table`, `parent_columns`, `auto_index_name` | Constraint enforcement mode; deferral state |
-| `sys.tablespaces` | `db_id`, `tablespace_name`, `location_path`, `is_default` | Filesystem placement per tablespace |
-
-### `pg_catalog.*` (PostgreSQL-compatible schema views)
-
-| View | PostgreSQL source | Coverage |
-|---|---|---|
-| `pg_catalog.pg_namespace` | `pg_namespace` | All schemas |
-| `pg_catalog.pg_tables` | `pg_tables` | Tables + schema + owner |
-| `pg_catalog.pg_indexes` | `pg_indexes` | Indexes + definition |
-| `pg_catalog.pg_constraint` | `pg_constraint` | PK, FK, UNIQUE, CHECK constraints |
-| `pg_catalog.pg_sequences` / `pg_sequence` | `pg_sequences` | All sequences |
-| `pg_catalog.pg_database` | `pg_database` | Database list |
-| `pg_catalog.pg_namespace` | `pg_namespace` | Namespace/schema list |
-| `pg_catalog.pg_proc` | `pg_proc` | Function catalog (partial) |
-| `pg_catalog.pg_roles` | `pg_roles` | Role list |
-| `pg_catalog.pg_user` | `pg_user` | User list |
-| `pg_catalog.pg_settings` | `pg_settings` | Configuration parameters |
-| `pg_catalog.pg_index` | `pg_index` | Index metadata with OIDs |
+**Coming in v0.7:** `referential_constraints`, `key_column_usage`.
 
 ---
 
-## Layer B — Runtime State
+## Layer 2 — PostgreSQL-Compatible Catalog
 
-These views answer: *"What is the system doing right now?"*
+*Use this layer when your tooling (psql, pgAdmin, Flyway, ActiveRecord, SQLAlchemy) expects `pg_catalog`.*
+*The goal is zero changes to existing PostgreSQL tooling.*
 
-### Session and connection monitoring
+| View | Status | Notes |
+|---|:---:|---|
+| `pg_catalog.pg_tables` | ✅ | |
+| `pg_catalog.pg_indexes` | ✅ | |
+| `pg_catalog.pg_constraint` | ✅ | PK, FK, UNIQUE, CHECK |
+| `pg_catalog.pg_namespace` | ✅ | |
+| `pg_catalog.pg_database` | ✅ | |
+| `pg_catalog.pg_sequences` / `pg_sequence` | ✅ | |
+| `pg_catalog.pg_roles` / `pg_user` | ✅ | |
+| `pg_catalog.pg_settings` | ✅ | |
+| `pg_catalog.pg_index` | ✅ | Index OID metadata |
+| `pg_catalog.pg_proc` | ⚠️ | Built-in functions only |
+| `pg_catalog.pg_locks` | 🔜 v0.7 | Requires HA / multi-node |
+| `pg_catalog.pg_stat_replication` | ⚠️ | Partial — replica lag via Prometheus |
+| `pg_catalog.pg_stat_progress_*` | 🔜 v0.8 | Progress views |
+
+---
+
+## Layer 3 — Runtime Observability Views
+
+*Use this layer to understand what is happening right now: sessions, waits, checkpoints, queue depth.*
+
+### Session and connection state
 
 | View | Key columns | PostgreSQL equivalent |
 |---|---|---|
 | `angara_stat_activity` | `pid`, `datname`, `usename`, `state`, `query_start`, `query_fingerprint`, `consumer_id`, `wait_event`, `wait_event_type` | `pg_stat_activity` |
-| `angara_stat_wait_events` | `event`, `event_type`, `total`, `active`, `total_duration_us` | `pg_stat_activity` (wait fields) |
+| `angara_stat_wait_events` | `event`, `event_type`, `total`, `active`, `total_duration_us` | `pg_stat_activity` wait columns |
 | `sys.health` | `uptime_seconds`, `connections_active`, `connections_accepted_total`, `txn_commit_epoch_current`, `txlog_durable_lsn` | No single-view PG equivalent |
-| `sys.identity` | `cluster_id`, `db_id`, `db_name`, `lease_holder_id`, `lease_expires_at`, `lease_acquired_at`, `lease_holder_hostname`, `recovery_mode` | No PG equivalent |
+| `sys.identity` | `cluster_id`, `db_name`, `lease_holder_id`, `lease_expires_at`, `lease_acquired_at`, `lease_holder_hostname`, `recovery_mode` | No PG equivalent |
 
-### Database-level statistics
+### Database and checkpoint statistics
 
 | View | Key columns | PostgreSQL equivalent |
 |---|---|---|
 | `angara_stat_database` | `datname`, `numbackends`, `xact_commit`, `xact_rollback`, `blks_read`, `blks_hit`, `conflicts` | `pg_stat_database` |
-| `angara_stat_bgwriter` | `checkpoints_timed`, `checkpoints_req`, `checkpoint_write_time_ms`, `checkpoint_sync_time_ms`, `buffers_checkpoint`, `buffers_clean`, `buffers_backend`, `checkpoint_errors` | `pg_stat_bgwriter` |
-
-### QoS and workload isolation state
-
-**Unique to AngaraBase — no PostgreSQL equivalent.**
-
-| View | Key columns | What it shows |
-|---|---|---|
-| `angara_stat_qos_queues` | `level` (critical/interactive/background), `queued_total`, `rejected_total`, `blocking_inflight` | Real-time queue depth and rejection rate per service level |
-| `sys.gc_tuning_status` | `current_budget`, `last_cycle_duration_ms`, `tuning_decision`, `bloat_ratio_percent`, `min_active_epoch_lag`, `sleep_ms`, `decisions_increase_total` | UNDO log GC state — the "no VACUUM" control loop |
-
-### Security and compliance
-
-| View | Key columns | Use |
-|---|---|---|
-| `sys.roles` | `role_name` | All roles |
-| `sys.user_roles` | `user_name`, `role_name`, `enabled` | User-role assignments |
-| `sys.role_privileges` | `role_name`, `privilege`, `enabled` | Privilege matrix per role |
-| `sys.audit_log` | `ts_unix_seconds`, `user_name`, `action`, `result`, `reason` | Structured audit trail |
-
----
-
-## Layer C — Performance & Query Analytics
-
-These views answer: *"How are queries performing and what does the optimizer know?"*
+| `angara_stat_bgwriter` | `checkpoints_timed`, `checkpoints_req`, `checkpoint_write_time_ms`, `checkpoint_sync_time_ms`, `buffers_checkpoint`, `buffers_clean`, `checkpoint_errors` | `pg_stat_bgwriter` |
 
 ### Query execution statistics
 
 | View | Key columns | PostgreSQL equivalent |
 |---|---|---|
-| `angara_stat_statements` | `queryid`, `consumer_id`, `query`, `calls`, `total_exec_time_ms`, `min_exec_time_ms`, `max_exec_time_ms`, `mean_exec_time_ms`, `rows`, `shared_blks_hit`, `shared_blks_read`, `class` | `pg_stat_statements` (extension in PG, built-in here) |
-| `angara_top_queries(N)` | `queryid`, `consumer_id`, `query`, `calls`, `total_exec_time_ms`, `rows` | `pg_stat_statements ORDER BY total_exec_time DESC LIMIT N` |
+| `angara_stat_statements` | `queryid`, `consumer_id`, `query`, `calls`, `total_exec_time_ms`, `min_exec_time_ms`, `max_exec_time_ms`, `mean_exec_time_ms`, `rows`, `shared_blks_hit`, `class` | `pg_stat_statements` — built-in, no extension needed |
+| `angara_top_queries(N)` | `queryid`, `consumer_id`, `query`, `calls`, `total_exec_time_ms`, `rows` | `pg_stat_statements ORDER BY … LIMIT N` |
 
-### Query Store — plan history and regression detection
+### Plan Store — plan history and regression detection
 
-**Unique to AngaraBase — analogous to SQL Server Query Store, not available in PostgreSQL without extensions.**
+> No PostgreSQL equivalent. Analogous to SQL Server Query Store.
 
 | View | Key columns | Purpose |
 |---|---|---|
-| `angara_query_store_entries` | `query_id`, `query_text`, `first_seen`, `last_seen`, `plan_count` | All tracked queries |
-| `angara_query_store_plans` | `plan_id`, `query_id`, `plan_json`, `first_seen`, `last_seen`, `is_regressed` | Historical execution plans; flags regressed plans |
-| `angara_query_store_intervals` | `query_id`, `plan_id`, `interval_start`, `interval_end`, `calls`, `mean_exec_time_ms`, `rows` | Per-plan performance over time |
+| `angara_query_store_entries` | `query_id`, `query_text`, `first_seen`, `last_seen`, `plan_count` | All tracked query shapes |
+| `angara_query_store_plans` | `plan_id`, `query_id`, `plan_json`, `first_seen`, `last_seen`, `is_regressed` | Historical plans; flags regressions |
+| `angara_query_store_intervals` | `query_id`, `plan_id`, `interval_start`, `interval_end`, `calls`, `mean_exec_time_ms`, `rows` | Per-plan performance over time windows |
 
-### Table and index statistics
+### Security and compliance
+
+| View | Key columns |
+|---|---|
+| `sys.roles` | `role_name` |
+| `sys.user_roles` | `user_name`, `role_name`, `enabled` |
+| `sys.role_privileges` | `role_name`, `privilege`, `enabled` |
+| `sys.audit_log` | `ts_unix_seconds`, `user_name`, `action`, `result`, `reason` |
+
+---
+
+## Layer 4 — Engine Contract Views
+
+*This layer is unique to AngaraBase. It exposes the engine-level contracts that make "Predictable by contract" a verifiable statement, not a marketing claim.*
+
+*Every field here reflects an architectural decision — not just a statistic.*
+
+### Table engine metadata
+
+`sys.tables` exposes per-table engine contracts — fields that have no equivalent in PostgreSQL because PostgreSQL has a single storage engine:
+
+| Column | What it expresses |
+|---|---|
+| `storage_engine` | `heap` / `memory` / `column` — which engine backs this table |
+| `durability` | `full` / `logged` / `none` — the crash-survival guarantee declared at `CREATE TABLE` |
+| `eviction_policy` | Memory eviction strategy for `AngaraMemory` tables |
+| `mutation_policy` | Whether the table is append-only or allows UPDATE/DELETE |
+| `append_only` | Append-only flag — enforced at engine level |
+| `max_rows` | Declared row capacity contract for memory tables |
+| `row_count_estimate` | Live planner input — updated after ANALYZE or DML |
+
+```sql
+-- Show the full engine contract for every table in the public schema
+SELECT table_name, storage_engine, durability, max_rows,
+       eviction_policy, append_only, mutation_policy, row_count_estimate
+FROM sys.tables
+WHERE schema_name = 'public'
+ORDER BY table_name;
+```
+
+### Workload isolation state
+
+| View | Key columns | What it proves |
+|---|---|---|
+| `angara_stat_qos_queues` | `level` (critical/interactive/background), `queued_total`, `rejected_total`, `blocking_inflight` | "Analytics cannot degrade OLTP" — real-time queue depth and rejection rate per service level |
+| `sys.workload_stats` | `schema_name`, `table_name`, `query_class`, `access_count`, `seq_scan`, `idx_scan`, `tuples_read`, `tuples_written` | Per-table access breakdown by OLTP vs analytical workload class |
+
+```sql
+-- Is any service level being throttled right now?
+SELECT level, queued_total, rejected_total, blocking_inflight
+FROM angara_stat_qos_queues
+WHERE rejected_total > 0 OR blocking_inflight > 0;
+
+-- Which tables are accessed heavily by analytics vs OLTP?
+SELECT table_name, query_class, access_count, seq_scan, idx_scan
+FROM sys.workload_stats
+ORDER BY access_count DESC
+LIMIT 20;
+```
+
+### UNDO log GC state ("No VACUUM" control loop)
+
+PostgreSQL runs VACUUM to reclaim dead tuple space. AngaraBase uses UNDO-log MVCC — there is no VACUUM.
+The GC control loop is fully observable:
+
+| View | Key columns | What it shows |
+|---|---|---|
+| `sys.gc_tuning_status` | `current_budget`, `bloat_ratio_percent`, `tuning_decision`, `min_active_epoch_lag`, `sleep_ms`, `decisions_increase_total`, `decisions_decrease_total` | The automatic GC cycle: current UNDO budget, last tuning decision, ratio of increase vs decrease cycles |
+
+```sql
+-- Is the UNDO GC keeping up? What is its current tuning decision?
+SELECT current_budget, bloat_ratio_percent, tuning_decision,
+       min_active_epoch_lag, decisions_increase_total, decisions_decrease_total
+FROM sys.gc_tuning_status;
+```
+
+### Statistics and planner internals
 
 | View | Key columns | PostgreSQL equivalent |
 |---|---|---|
-| `sys.table_stats` | `seq_scan`, `idx_scan`, `tuples_read`, `tuples_written`, `row_count_estimate`, `row_count_live`, `dml_change_counter`, `last_committed_rowid`, `last_insert_epoch` | `pg_stat_user_tables` |
+| `sys.table_stats` | `seq_scan`, `idx_scan`, `tuples_read`, `tuples_written`, `row_count_estimate`, `row_count_live`, `dml_change_counter`, `last_committed_rowid` | `pg_stat_user_tables` |
 | `sys.index_stats` | `seeks`, `scans`, `tuples_read`, `cache_hit`, `cache_miss` | `pg_stat_user_indexes` |
-| `sys.workload_stats` | `query_class`, `access_count`, `seq_scan`, `idx_scan`, `tuples_read`, `tuples_written` per table per workload class | **No PG equivalent** — breakdown by OLTP vs HTAP workload |
-| `sys.column_stats` | `null_ppm`, `distinct_estimate`, `ndv_approx`, `col_min`, `col_max`, `histogram_bounds`, `mcv_values`, `mcv_frequencies`, `hll_enabled`, `reservoir_size` | `pg_stats` (partial) — **exposes full statistics state** |
+| `sys.column_stats` | `null_ppm`, `distinct_estimate`, `ndv_approx`, `col_min`, `col_max`, `histogram_bounds`, `mcv_values`, `mcv_frequencies`, `hll_enabled`, `reservoir_size`, `reservoir_epoch` | `pg_stats` — **full statistics state exposed**, including HLL sketch, histogram bounds, MCV lists |
 | `sys.multicolumn_stats` | `col_a`, `col_b`, `correlation`, `ndv_joint`, `mcv_joint` | `pg_statistic_ext` (partial) |
 
-### Adaptive Query Processing (AQP)
+### Adaptive Query Processing (AQP) state
 
 | View | Purpose |
 |---|---|
-| `sys.aqp_stats` | AQP feedback loop statistics |
-| `sys.aqp_feedback` | Per-query cardinality feedback entries |
+| `sys.aqp_stats` | AQP cardinality feedback loop statistics |
+| `sys.aqp_feedback` | Per-query cardinality correction entries |
 | `sys.aqp_blacklist` | Queries excluded from AQP re-optimization |
 
 ### Learned index models
-
-**Unique — allows inspection and management of learned cardinality models.**
 
 | View | Key columns |
 |---|---|
@@ -148,218 +195,66 @@ These views answer: *"How are queries performing and what does the optimizer kno
 
 ### Stream / event bus monitoring
 
-| View | Key columns | Use |
-|---|---|---|
-| `sys.stream_subscriptions` | Subscription list per channel | Monitor active LISTEN/NOTIFY subscribers |
-| `sys.stream_stats` | `table_name`, `log_size`, `oldest_offset` | Event log depth per stream |
-
----
-
-## Layer D — Configuration and Metrics
-
-| View | Key columns | Use |
-|---|---|---|
-| `sys.settings` / `sys.knobs` | `name`, `value`, `source`, `dynamic`, `doc` | All configuration parameters with docs |
-| `sys.settings_meta` | `name`, `scope`, `dynamic`, `restart_required`, `sensitive` | Parameter metadata (restart required? sensitive?) |
-| `sys.metrics` | `name`, `value` | All Prometheus metrics accessible via SQL |
-| `pg_catalog.pg_settings` | `name`, `setting`, `category` | PostgreSQL-compatible settings view |
-
----
-
-## Cookbook — 20 essential queries
-
-### Schema discovery
-
-```sql
--- 1. List all tables with their storage engine and estimated row count
-SELECT schema_name, table_name, storage_engine, durability, row_count_estimate
-FROM sys.tables
-ORDER BY schema_name, table_name;
-
--- 2. Find all indexes on a specific table
-SELECT index_name, columns, auto_created, created_by_constraint
-FROM sys.indexes
-WHERE schema_name = 'public' AND table_name = 'orders';
-
--- 3. List all foreign key constraints with their targets
-SELECT table_name, constraint_name, child_columns, parent_table, parent_columns, enforcement_mode
-FROM sys.constraints
-WHERE kind = 'FK'
-ORDER BY table_name;
-
--- 4. Show all tablespaces and their filesystem paths
-SELECT tablespace_name, location_path, is_default
-FROM sys.tablespaces;
-
--- 5. Portable schema inspection (works with any PostgreSQL tool)
-SELECT table_schema, table_name, column_name, data_type, is_nullable
-FROM information_schema.columns
-WHERE table_schema = 'public'
-ORDER BY table_name, ordinal_position;
-```
-
-### Runtime state
-
-```sql
--- 6. Active sessions with wait state
-SELECT pid, datname, usename, state, wait_event_type, wait_event, query_fingerprint
-FROM angara_stat_activity
-WHERE state = 'active';
-
--- 7. Top wait events right now
-SELECT event, event_type, active, total_duration_us
-FROM angara_stat_wait_events
-WHERE active > 0
-ORDER BY active DESC;
-
--- 8. Instance health snapshot (single row)
-SELECT uptime_seconds, connections_active, txn_commit_epoch_current, txlog_durable_lsn
-FROM sys.health;
-
--- 9. Cluster identity and lease state (HA diagnostics)
-SELECT cluster_id, db_name, lease_holder_id, lease_expires_at, recovery_mode
-FROM sys.identity;
-
--- 10. QoS queue state: are any service levels being throttled?
-SELECT level, queued_total, rejected_total, blocking_inflight
-FROM angara_stat_qos_queues
-WHERE rejected_total > 0 OR blocking_inflight > 0;
-```
-
-### Performance analysis
-
-```sql
--- 11. Top 10 queries by total execution time
-SELECT * FROM angara_top_queries(10);
-
--- 12. Queries slower than 100ms on average
-SELECT queryid, query, calls, mean_exec_time_ms, class
-FROM angara_stat_statements
-WHERE mean_exec_time_ms > 100
-ORDER BY mean_exec_time_ms DESC
-LIMIT 20;
-
--- 13. Tables with high seq_scan / idx_scan ratio (missing indexes?)
-SELECT schema_name, table_name, seq_scan, idx_scan,
-       CASE WHEN idx_scan = 0 THEN 'no index scans'
-            ELSE CAST(seq_scan * 100 / (seq_scan + idx_scan) AS text) || '% seq'
-       END AS scan_profile
-FROM sys.table_stats
-WHERE seq_scan > 100
-ORDER BY seq_scan DESC;
-
--- 14. Index hit rate per index (cache efficiency)
-SELECT schema_name, table_name, index_name,
-       cache_hit, cache_miss,
-       CASE WHEN cache_hit + cache_miss = 0 THEN NULL
-            ELSE CAST(cache_hit * 100 / (cache_hit + cache_miss) AS text) || '%'
-       END AS hit_rate
-FROM sys.index_stats
-ORDER BY cache_miss DESC;
-
--- 15. OLTP vs analytics workload split per table
-SELECT schema_name, table_name, query_class,
-       access_count, tuples_read, tuples_written
-FROM sys.workload_stats
-ORDER BY schema_name, table_name, query_class;
-```
-
-### Query plan history
-
-```sql
--- 16. Queries with regressed plans (needs intervention)
-SELECT e.query_text, p.plan_id, p.first_seen, p.last_seen, p.is_regressed
-FROM angara_query_store_entries e
-JOIN angara_query_store_plans p ON p.query_id = e.query_id
-WHERE p.is_regressed = true;
-
--- 17. Performance of a specific plan over time
-SELECT interval_start, interval_end, calls, mean_exec_time_ms, rows
-FROM angara_query_store_intervals
-WHERE query_id = 12345  -- from angara_query_store_entries
-ORDER BY interval_start DESC
-LIMIT 48;
-```
-
-### UNDO log and GC state
-
-```sql
--- 18. UNDO log health (the "no VACUUM" control loop)
-SELECT current_budget, bloat_ratio_percent, tuning_decision,
-       min_active_epoch_lag, decisions_increase_total, decisions_decrease_total
-FROM sys.gc_tuning_status;
-```
-
-### Configuration and settings
-
-```sql
--- 19. Show all dynamic settings that can be changed without restart
-SELECT name, value, scope, doc
-FROM sys.settings_meta
-JOIN sys.settings USING (name)
-WHERE dynamic = true
-ORDER BY name;
-
--- 20. Show current service_level and related knobs
-SELECT name, value
-FROM sys.settings
-WHERE name LIKE '%service_level%' OR name LIKE '%workload%' OR name LIKE '%qos%';
-```
-
----
-
-## What AngaraBase exposes that PostgreSQL doesn't
-
-| Capability | AngaraBase | PostgreSQL 18 |
-|---|---|---|
-| Storage engine per table | `sys.tables.storage_engine` (heap/memory/column) | Not applicable — single engine |
-| Durability tier per table | `sys.tables.durability` | Not applicable |
-| QoS queue depth by service level | `angara_stat_qos_queues` | ❌ No equivalent |
-| UNDO log GC control loop state | `sys.gc_tuning_status` | ❌ VACUUM replaces this |
-| Workload-class breakdown per table | `sys.workload_stats` | ❌ No per-class split |
-| Full column statistics state | `sys.column_stats` — HLL, histograms, MCV, reservoir | `pg_stats` — partial read-only |
-| Plan history + regression flags | `angara_query_store_*` | `pg_stat_statements` — no plan history |
-| Learned index model registry | `sys.learned_models`, `sys.learned_active_models` | ❌ No equivalent |
-| Event stream monitoring | `sys.stream_subscriptions`, `sys.stream_stats` | ❌ No equivalent |
-| Cluster identity + lease state | `sys.identity` | ❌ No equivalent in single-node PG |
-| Constraint enforcement mode | `sys.constraints.enforcement_mode`, `trust_status` | `pg_constraint` — mode only |
-| Tablespace to filesystem path | `sys.tablespaces.location_path` | `pg_tablespace` — similar |
-| All metrics via SQL | `sys.metrics` — any Prometheus counter/gauge | ❌ No built-in SQL bridge |
-
----
-
-## What is not yet implemented
-
-| PostgreSQL feature | Status |
+| View | Key columns |
 |---|---|
-| `pg_locks` — lock table with `granted`, `locktype` | 🔜 v0.7 (HA / multi-node prerequisite) |
-| `pg_stat_replication` — replica lag per standby | ⚠️ Partial — replica lag via Prometheus metric |
-| `pg_blocking_pids()` — blocking session graph | 🔜 v0.7 |
-| `information_schema.referential_constraints` | 🔜 v0.7 |
-| `information_schema.key_column_usage` | 🔜 v0.7 |
-| `pg_stat_progress_*` — operation progress views | 🔜 v0.8 |
+| `sys.stream_subscriptions` | Active LISTEN/NOTIFY subscribers per channel |
+| `sys.stream_stats` | `table_name`, `log_size`, `oldest_offset` — event log depth per stream |
+
+### Configuration and live metrics
+
+| View | Key columns |
+|---|---|
+| `sys.settings` / `sys.knobs` | `name`, `value`, `source`, `dynamic`, `doc` — all configuration knobs with inline docs |
+| `sys.settings_meta` | `name`, `scope`, `dynamic`, `restart_required`, `sensitive` |
+| `sys.metrics` | `name`, `value` — **all Prometheus counters and gauges queryable via SQL** |
 
 ---
 
-## Feature detection
+## Better than PostgreSQL 18
 
-ORM and tooling authors: use this query to detect AngaraBase and check capabilities.
+The following views expose capabilities that either don't exist in PostgreSQL or are significantly richer in AngaraBase.
+
+| Capability | AngaraBase view | PostgreSQL 18 | Why it matters |
+|---|---|---|---|
+| **Storage engine per table** | `sys.tables.storage_engine` — `heap`/`memory`/`column` | Not applicable (single engine) | Verify which engine backs a table; understand durability guarantee |
+| **Durability tier per table** | `sys.tables.durability` — `full`/`logged`/`none` | Not applicable | Contractual crash-survival guarantee per table, declared at creation |
+| **Eviction and mutation policy** | `sys.tables.eviction_policy`, `mutation_policy`, `append_only` | Not applicable | Engine-level behavioral contracts |
+| **QoS service-level queue depth** | `angara_stat_qos_queues.rejected_total` per level | ❌ No equivalent | Real-time evidence that OLTP is not being throttled by analytics |
+| **Per-workload-class table access** | `sys.workload_stats.query_class` | ❌ No equivalent | See how OLTP and analytics split I/O on each table |
+| **UNDO GC control loop state** | `sys.gc_tuning_status.tuning_decision` | ❌ VACUUM replaces this | Observe the "no VACUUM" loop; verify it is keeping up |
+| **Plan history with regression flags** | `angara_query_store_plans.is_regressed` | ❌ `pg_stat_statements` has no plan history | Catch plan regressions before users report them |
+| **Full column statistics state** | `sys.column_stats` — HLL sketch, histogram bounds, MCV lists, reservoir | `pg_stats` — read-only, partial | Understand exactly what the planner knows; audit statistics staleness |
+| **All Prometheus metrics via SQL** | `sys.metrics` | ❌ No built-in SQL bridge | Query any counter or gauge from `psql` without a separate metrics stack |
+| **Cluster identity + lease state** | `sys.identity.lease_holder_id`, `recovery_mode` | ❌ No equivalent in single-node PG | Diagnose HA failover state and recovery mode from SQL |
+| **Structured audit trail** | `sys.audit_log` — stable fields, queryable | ❌ Requires extension (`pgaudit`) | Zero-config audit; no external log parsing |
+| **Learned cardinality model registry** | `sys.learned_models`, `sys.learned_active_models` | ❌ No equivalent | Inspect and manage ML-backed cardinality estimation |
+| **Event stream monitoring** | `sys.stream_subscriptions`, `sys.stream_stats` | ❌ No equivalent | Monitor LISTEN/NOTIFY and WAL-based CDC pipelines |
+| **stat_statements built-in** | `angara_stat_statements` — no extension needed | `pg_stat_statements` (extension, must be installed) | Query performance stats available from day one |
+
+---
+
+## Feature detection for ORM and tooling authors
 
 ```sql
--- Detect AngaraBase and query its introspection capabilities
+-- Detect AngaraBase
 SELECT name, value
 FROM sys.settings
 WHERE name IN ('server_version', 'angara_version', 'angara_build_sha');
 
--- Check if a specific view exists
-SELECT table_name
+-- Detect which introspection layers are available
+SELECT table_schema, count(*) AS view_count
 FROM information_schema.tables
-WHERE table_schema = 'sys' AND table_name = 'workload_stats';
+WHERE table_schema IN ('sys', 'information_schema', 'pg_catalog')
+GROUP BY table_schema;
 
--- Or query directly — returns empty result set (not an error) if view exists
+-- Check a specific view exists without error
 SELECT * FROM sys.health LIMIT 0;
+SELECT * FROM angara_stat_qos_queues LIMIT 0;
 ```
 
 ---
 
-*See also: [`SQL_COMPATIBILITY.md`](SQL_COMPATIBILITY.md) — full SQL feature compatibility matrix.*
+*See also:*
+- *[`INTROSPECTION_QUICKSTART.md`](INTROSPECTION_QUICKSTART.md) — 15 queries in 5 minutes*
+- *[`SQL_COMPATIBILITY.md`](SQL_COMPATIBILITY.md) — full SQL feature compatibility matrix*
+- *[`DESIGN.md`](DESIGN.md) — architectural decisions behind the engine contract model*
