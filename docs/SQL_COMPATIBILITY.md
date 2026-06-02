@@ -261,22 +261,77 @@ For the full SQL reference, runbooks and known edge cases:
 
 ## System Catalog & Observability
 
-| Feature | Status | Notes |
+> **Full introspection reference:** [`docs/INTROSPECTION.md`](INTROSPECTION.md) — view map, column lists, 20 SQL cookbook queries, and comparison with PostgreSQL.
+
+AngaraBase provides **three introspection namespaces** queryable via standard `pgwire`:
+
+### `pg_catalog.*` — PostgreSQL-compatible
+
+| View | Status | Notes |
 |---|:---:|---|
 | `pg_catalog.pg_tables` | ✅ | |
-| `pg_catalog.pg_class` | ✅ | |
 | `pg_catalog.pg_indexes` | ✅ | |
-| `pg_catalog.pg_type` | ✅ | |
-| `pg_catalog.pg_constraint` | ✅ | |
+| `pg_catalog.pg_constraint` | ✅ | PK, FK, UNIQUE, CHECK |
 | `pg_catalog.pg_namespace` | ✅ | |
-| `pg_catalog.pg_stat_activity` | ✅ | Active sessions |
-| `pg_catalog.pg_stat_user_tables` | ⚠️ | Partial stats |
-| `information_schema` | ⚠️ | Common views; coverage expanding |
-| `angara_resource_usage()` | ✅ | AngaraBase-native: named resource boundaries |
-| Prometheus metrics endpoint | ✅ | Every resource boundary has a metric |
+| `pg_catalog.pg_database` | ✅ | |
+| `pg_catalog.pg_sequences` / `pg_sequence` | ✅ | |
+| `pg_catalog.pg_roles` / `pg_user` | ✅ | |
+| `pg_catalog.pg_settings` | ✅ | |
+| `pg_catalog.pg_index` | ✅ | |
+| `pg_catalog.pg_proc` | ⚠️ | Partial — built-in functions only |
+| `pg_catalog.pg_stat_activity` | ✅ | Via `angara_stat_activity` alias |
+| `pg_catalog.pg_stat_user_tables` | ⚠️ | Partial — via `sys.table_stats` |
+| `pg_catalog.pg_locks` | 🔜 v0.7 | Requires HA / multi-node |
+| `pg_catalog.pg_stat_replication` | ⚠️ | Partial — via Prometheus metric |
+| `pg_catalog.pg_stat_progress_*` | 🔜 v0.8 | Progress views |
+
+### `information_schema.*` — SQL-standard portable
+
+| View | Status | Notes |
+|---|:---:|---|
+| `information_schema.tables` | ✅ | |
+| `information_schema.columns` | ✅ | |
+| `information_schema.constraint_column_usage` | ✅ | |
+| `information_schema.referential_constraints` | 🔜 v0.7 | |
+| `information_schema.key_column_usage` | 🔜 v0.7 | |
+
+### `sys.*` and `angara_stat_*` — AngaraBase-native
+
+| View | Status | PostgreSQL equivalent |
+|---|:---:|---|
+| `sys.databases`, `sys.schemas`, `sys.tables` | ✅ | `pg_database`, `pg_namespace`, `pg_tables` |
+| `sys.columns`, `sys.indexes`, `sys.constraints` | ✅ | `information_schema` |
+| `sys.tablespaces` | ✅ | `pg_tablespace` |
+| `sys.health` | ✅ | No single-view equivalent |
+| `sys.identity` | ✅ | No equivalent (lease/cluster info) |
+| `sys.settings` / `sys.settings_meta` | ✅ | `pg_settings` |
+| `sys.table_stats`, `sys.index_stats` | ✅ | `pg_stat_user_tables/indexes` |
+| `sys.column_stats`, `sys.multicolumn_stats` | ✅ | `pg_stats` (partial) |
+| `sys.workload_stats` | ✅ | **No equivalent** — per-workload-class breakdown |
+| `sys.gc_tuning_status` | ✅ | **No equivalent** — UNDO log GC state |
+| `sys.roles`, `sys.user_roles`, `sys.role_privileges` | ✅ | `pg_roles` (partial) |
+| `sys.audit_log` | ✅ | **No equivalent** — structured audit trail |
+| `angara_stat_activity` | ✅ | `pg_stat_activity` |
+| `angara_stat_statements` | ✅ | `pg_stat_statements` (built-in, no extension needed) |
+| `angara_stat_wait_events` | ✅ | `pg_stat_activity` wait columns |
+| `angara_stat_database` | ✅ | `pg_stat_database` |
+| `angara_stat_bgwriter` | ✅ | `pg_stat_bgwriter` |
+| `angara_stat_qos_queues` | ✅ | **No equivalent** — QoS service-level queue state |
+| `angara_top_queries(N)` | ✅ | `pg_stat_statements ORDER BY … LIMIT N` |
+| `angara_query_store_*` (entries/plans/intervals) | ✅ | **No equivalent** — plan history + regression flags |
+| `sys.aqp_stats`, `sys.aqp_feedback`, `sys.aqp_blacklist` | ✅ | **No equivalent** — AQP loop state |
+| `sys.learned_models`, `sys.learned_active_models` | ✅ | **No equivalent** — learned cardinality models |
+| `sys.stream_subscriptions`, `sys.stream_stats` | ✅ | **No equivalent** — event stream monitoring |
+| `sys.metrics` | ✅ | **No equivalent** — all Prometheus counters via SQL |
+
+### Observability infrastructure
+
+| Feature | Status | Notes |
+|---|:---:|---|
+| Prometheus metrics endpoint | ✅ | Every resource boundary has a named metric |
 | USDT probes (`bpftrace` / `perf`) | ✅ | `probe_query_*`, `probe_phase_*`, `probe_operator_*` |
 | Structured logs (stable field names) | ✅ | JSON-compatible |
-| `EXPLAIN ANALYZE` with per-phase timing | ✅ | |
+| `EXPLAIN ANALYZE` with per-phase timing | ✅ | Plan + execution breakdown |
 
 ---
 

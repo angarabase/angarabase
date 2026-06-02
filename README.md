@@ -134,6 +134,9 @@ Full compatibility map: [angarabase.dev → SQL Reference](https://angarabase.de
   `perf`, structured logs with stable field names.
 - **Built-in security baseline** — `scram` authentication out of the box, RLS / audit / break-glass on the
   roadmap; no behavior is enabled silently.
+- **Deep introspection** — 60+ system views across `information_schema`, `pg_catalog`, `sys.*`, and
+  `angara_stat_*`. Includes plan store with regression detection, QoS service-level queue state, per-workload
+  table access breakdown, and UNDO log GC status — all queryable via `psql`. See [`docs/INTROSPECTION.md`](docs/INTROSPECTION.md).
 - **Evidence-gated releases** — every release train closes on a 24-hour soak test and a pinned benchmark.
   Correctness is an artifact in `Releases`, not a marketing claim.
 
@@ -246,6 +249,7 @@ Every strong statement in this README is backed by a verifiable artifact:
 | "ARIES crash recovery" | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §Recovery · soak evidence in Releases |
 | "pgwire compatible" | [`docs/SQL_COMPATIBILITY.md`](docs/SQL_COMPATIBILITY.md) — full compatibility matrix |
 | "Evidence-gated releases" | SHA-256 signed tarballs + evidence pack in [GitHub Releases](../../releases) |
+| Introspection surface | [`docs/INTROSPECTION.md`](docs/INTROSPECTION.md) — 60+ views queryable via `psql`; `angara_stat_qos_queues`, `sys.workload_stats`, plan store; cross-referenced to PG equivalents |
 | Benchmarks | 🔜 **CH-benCHmark** (TPC-C + TPC-H concurrent) kit ships with v0.7 Open Beta — [benchmark methodology →](docs/RELIABILITY.md) |
 
 ---
@@ -258,6 +262,7 @@ Every strong statement in this README is backed by a verifiable artifact:
 | **Documentation** (canonical) | [`angarabase.dev`](https://angarabase.dev) |
 | **Installation packages** | [GitHub Releases](../../releases) · [`PACKAGES.md`](PACKAGES.md) |
 | **PostgreSQL compatibility matrix** | [`docs/SQL_COMPATIBILITY.md`](docs/SQL_COMPATIBILITY.md) |
+| **Schema & runtime introspection** | [`docs/INTROSPECTION.md`](docs/INTROSPECTION.md) — view map, cookbook, PG comparison |
 | **Reliability guarantees & failure modes** | [`docs/RELIABILITY.md`](docs/RELIABILITY.md) |
 | **Design decisions & unique features** | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | **Architecture overview** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
