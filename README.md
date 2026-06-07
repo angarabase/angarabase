@@ -1,9 +1,7 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/logo_website_dark.png">
-  <img src="assets/logo_website_light.png" alt="AngaraBase" width="520">
-</picture>
+<img src="assets/logo_website_light.png#gh-light-mode-only" alt="AngaraBase" width="520">
+<img src="assets/logo_website_dark.png#gh-dark-mode-only" alt="AngaraBase" width="520">
 
 **Analytics cannot degrade your transactions. No ETL. No VACUUM. One binary.**
 
